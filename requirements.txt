@@ -1,0 +1,7 @@
+pandas
+matplotlib
+mido
+python-rtmidi
+numpy
+pyfluidsynth
+pychord
