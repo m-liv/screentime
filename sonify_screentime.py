@@ -30,7 +30,7 @@ def map_screentime_to_pitch(screen_time, max_screentime, interval='day'):
         benchmark = 60
     return int(np.interp(screen_time, [0, max(max_screentime, benchmark)], [max_pitch, min_pitch])) 
 
-def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_duration=2, output_midi="screentime.mid", output_wav="screentime.wav", soundfont="Grand_Piano.sf2"):
+def sonify_screentime(df, target_screentime, interval='day', note_duration=2, output_midi="screentime.mid", output_wav="screentime.wav", soundfont="Grand_Piano.sf2"):
     """
     Map screentime data to chords and generate a MIDI and WAV file from this data. 
     
@@ -38,7 +38,6 @@ def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_durat
     - df: intervalized dataframe containing screentime totals per interval
     - target_screentime: threshold (in minutes) determining major/minor chords
     - interval: interval represented by screentime (default: 'day')
-    - bpm: tempo for generated MIDI file (default: 120)
     - note_duration: duration of each note in seconds (default: 2)
     - output_midi: name of output MIDI file (default: "screentime.mid")
     - output_wav: name of output WAV file (default: "screentime.wav")
@@ -47,12 +46,11 @@ def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_durat
     Returns:
     - A new dataframe with added 'Chord' and 'Octave' columns showing the chords and octaves used for each datapoint
     """
-    
+       
     # Print each parameter
     print("Sonifying screentime...")
     print(f"Target Screentime: {target_screentime}")
     print(f"Interval: {interval}")
-    print(f"BPM: {bpm}")
     print(f"Note Duration: {note_duration}")
     print(f"Output MIDI: {output_midi}")
     print(f"Output WAV: {output_wav}")
@@ -64,9 +62,14 @@ def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_durat
     track = MidiTrack()
     midi.tracks.append(track)
 
-    # Set tempo
-    tempo = mido.bpm2tempo(bpm)
+    # Set tempo as 60 BPM
+    tempo = mido.bpm2tempo(60)
     track.append(mido.MetaMessage('set_tempo', tempo=tempo))
+    
+    # Add MIDI controls for sustain (64), reverb (91), and expression (11)
+    track.append(Message('control_change', control=64, value=127, time=0))
+    track.append(Message('control_change', control=91, value=127, time=0))
+    track.append(Message('control_change', control=11, value=50, time=0))
 
     # Create lists to store chords and octaves
     chords = []
@@ -75,7 +78,22 @@ def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_durat
     # Get max screentime across the data
     max_screentime = df['Screen Time (Mins)'].max()
     
-    for _, row in df.iterrows():
+    # How much to overlap the chords-- to reduce choppiness
+    overlap_ratio = 0.6
+    
+    # Velocity (volume) of notes
+    velocity = 50
+
+    # Set the note duration (in ticks) and space between chords
+    midi.ticks_per_beat = 480
+    full_duration_ticks = int(note_duration * midi.ticks_per_beat) 
+    interval_between_chords = int(full_duration_ticks * (1 - overlap_ratio))  
+    
+    # Store scheduled note-off events and track the absolute tick position in the track
+    scheduled_note_offs = [] 
+    
+    # Process all chords
+    for i, (_, row) in enumerate(df.iterrows()):
         screentime = row['Screen Time (Mins)']
         
         # Determine base note
@@ -102,21 +120,46 @@ def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_durat
         chord_name = chord_matches[0] if chord_matches else "Unknown"
         chords.append(f"{chord_name} ({', '.join(note_names)})")
         chord_octaves.append(chord_octave)
-
-        # Build the chord
+        
+        # Calculate note-on time for this chord: first chord in track starts at 0, rest at intervals
+        note_on_time = 0 if i == 0 else interval_between_chords 
+        
+        # Flush scheduled note-offs before adding new notes
+        for j, (note, ticks_remaining) in enumerate(scheduled_note_offs):
+            time = ticks_remaining if j == 0 else 0
+            track.append(Message('note_off', note=note, velocity=0, time=time))
+        scheduled_note_offs = []
+            
+        # Add each note to the chord-- first note starts at note-on time, others follow immediately
+        for j, note in enumerate(chord_notes):
+            time = note_on_time if i > 0 and j == 0 else 0
+            track.append(Message('note_on', note=note, velocity=velocity, time=time))
+            
         for note in chord_notes:
-            track.append(Message('note_on', note=note, velocity=64, time=0))
+            scheduled_note_offs.append((note, full_duration_ticks)) # Schedule note-off time
 
-        # Release chord after 2 seconds
-        track.append(Message('note_off', note=chord_notes[0], velocity=64, time=mido.second2tick(note_duration, midi.ticks_per_beat, tempo)))
-        track.append(Message('note_off', note=chord_notes[1], velocity=64, time=0))
-        track.append(Message('note_off', note=chord_notes[2], velocity=64, time=0))
-
+        # Every 4 notes, rearticulate sustain pedal to prevent muddiness
+        if i > 0 and i % 4 == 0:
+            track.append(Message('control_change', control=64, value=0, time=0))
+            track.append(Message('control_change', control=64, value=127, time=0))
+    
+    # Flush scheduled note-offs (for last chord) 
+    for j, (note, ticks_remaining) in enumerate(scheduled_note_offs):
+        time = ticks_remaining if j == 0 else 0
+        track.append(Message('note_off', note=note, velocity=0, time=time))
+        
+    track.append(Message('control_change', control=64, value=0, time=20))
+    
     # Save MIDI file
     midi.save(output_midi)
 
-    # Convert MIDI to WAV using FluidSynth
-    subprocess.run(["fluidsynth", "-ni", soundfont, output_midi, "-F", output_wav, "-r", "44100"])
+    # Convert MIDI to WAV using FluidSynth with tuned reverb, chorus, and 44100 sample rate
+    subprocess.run([
+        "fluidsynth", "-ni", "-g", "1.2",
+        "-R", "1", "-C", "3",
+        soundfont, output_midi,
+        "-F", output_wav, "-r", "44100"
+    ])
 
     # Add 'Chord' and 'Octave' columns to the dataframe
     df['Chord'] = chords
@@ -126,11 +169,11 @@ def sonify_screentime(df, target_screentime, interval='day', bpm=120, note_durat
     print(f"Generated {output_wav} from {output_midi}")
     
     # Return dataframe with added 'Chord' and 'Octave' columns
-    return df  
+    return df
 
 
 # Function to implement the entire pipeline
-def sonify_screentime_data(file, start_time, end_time, target_screentime, interval, bpm, note_duration, output_midi="screentime.mid", output_wav="screentime.wav", soundfont="Grand_Piano.sf2"):
+def sonify_screentime_data(file, start_time, end_time, target_screentime, interval, note_duration, output_midi="screentime.mid", output_wav="screentime.wav", soundfont="Grand_Piano.sf2"):
     """
     Clean, process, intervalize, and sonify screentime data.
     
@@ -140,8 +183,7 @@ def sonify_screentime_data(file, start_time, end_time, target_screentime, interv
     - end_time: end time for the interval (non-inclusive)
     - target_screentime: target screentime in minutes
     - interval: interval by which to group the data by ('hour', 'day', 'week', 'month')
-    - bpm: tempo for generated MIDI file
-    - note_duration: duration of each note in seconds
+    - note_duration: duration of each note 
     """
     # Clean the screentime data
     clean_df = clean_screen_data(file)
@@ -153,7 +195,7 @@ def sonify_screentime_data(file, start_time, end_time, target_screentime, interv
     intervalized_df = intervalize_screentime(processed_df, start_time, end_time, interval)
 
     # Sonify the screentime data
-    df = sonify_screentime(intervalized_df, target_screentime, interval, bpm, note_duration, output_midi, output_wav, soundfont)
+    df = sonify_screentime(intervalized_df, target_screentime, interval, note_duration, output_midi, output_wav, soundfont)
     
     # Return final dataframe
     return df
