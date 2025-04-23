@@ -28,19 +28,28 @@ from sonify_screentime import sonify_screentime_data
 # df.to_csv("data/may_25_2022.csv", index=False)
 
 
-# Generate tune for 4/22/2022-- moderate screentime day (87 mins)
-start_time = "2022-04-22 00:00:00"
-end_time = "2022-04-23 00:00:00"
+# # Generate tune for 4/22/2022-- moderate screentime day (87 mins)
+# start_time = "2022-04-22 00:00:00"
+# end_time = "2022-04-23 00:00:00"
+# df = sonify_screentime_data("data/screen.csv", start_time=start_time, end_time=end_time, target_screentime=20, interval='hour', note_duration=1.3, 
+#                        output_midi="sound/apr_22_2022.mid", output_wav="sound/apr_22_2022.wav", soundfont="Grand_Piano.sf2")
+
+# # Save df to a new file
+# df.to_csv("data/apr_22_2022.csv", index=False)
+
+# # Generate tune for 2/2/2022-- low screentime day (22 mins)
+# start_time = "2022-02-02 00:00:00"
+# end_time = "2022-02-03 00:00:00"
+# df = sonify_screentime_data("data/screen.csv", start_time=start_time, end_time=end_time, target_screentime=20, interval='hour', note_duration=1.3, 
+#                        output_midi="sound/feb_02_2022.mid", output_wav="sound/feb_02_2022.wav", soundfont="Grand_Piano.sf2")
+# # Save df to a new file
+# df.to_csv("data/feb_02_2022.csv", index=False)
+
+# Generate tune for 6/26/2022-- median screentime day (191 mins)
+start_time = "2022-06-26 00:00:00"
+end_time = "2022-06-27 00:00:00"
 df = sonify_screentime_data("data/screen.csv", start_time=start_time, end_time=end_time, target_screentime=20, interval='hour', note_duration=1.3, 
-                       output_midi="sound/apr_22_2022.mid", output_wav="sound/apr_22_2022.wav", soundfont="Grand_Piano.sf2")
+                       output_midi="sound/jun_26_2022.mid", output_wav="sound/jun_26_2022.wav", soundfont="Grand_Piano.sf2")
 
 # Save df to a new file
-df.to_csv("data/apr_22_2022.csv", index=False)
-
-# Generate tune for 2/2/2022-- low screentime day (22 mins)
-start_time = "2022-02-02 00:00:00"
-end_time = "2022-02-03 00:00:00"
-df = sonify_screentime_data("data/screen.csv", start_time=start_time, end_time=end_time, target_screentime=20, interval='hour', note_duration=1.3, 
-                       output_midi="sound/feb_02_2022.mid", output_wav="sound/feb_02_2022.wav", soundfont="Grand_Piano.sf2")
-# Save df to a new file
-df.to_csv("data/feb_02_2022.csv", index=False)
+df.to_csv("data/jun_26_2022.csv", index=False)
