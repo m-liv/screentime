@@ -150,6 +150,13 @@ def sonify_screentime(df, target_screentime, interval='day', note_duration=2, ou
         
     track.append(Message('control_change', control=64, value=0, time=20))
     
+    # Dummy control change to prevent silence at end
+    track.append(Message('note_on', note=1, velocity=1, time=20))
+    track.append(Message('note_off', note=1, velocity=0, time=10))
+    
+    # Meta message for DAWs
+    track.append(mido.MetaMessage('end_of_track', time=0))
+    
     # Save MIDI file
     midi.save(output_midi)
 
